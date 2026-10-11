@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/Enhancements/FirstPersonMod/FirstPersonMod.h"
 #include "vt.h"
 
 #include "overlays/actors/ovl_Arms_Hook/z_arms_hook.h"
@@ -3575,8 +3576,17 @@ void Attention_FindActorInCategory(PlayState* play, ActorContext* actorCtx, Play
             }
 
             if (actor != sp84) {
-                var = Attention_WeightedDistToPlayerSq(actor, player, D_8015BBFC);
-                if ((var < D_8015BBF0) && Attention_ActorIsInRange(actor, var) &&
+                // #region SOH [FirstPersonMod] Navi picks whatever is under the crosshair
+                s32 inRange;
+                if (FirstPersonMod_TargetingActive()) {
+                    var = FirstPersonMod_CrosshairWeight(play, actor);
+                    inRange = (var >= 0.0f) && Attention_ActorIsInRange(actor, actor->xyzDistToPlayerSq);
+                } else {
+                    var = Attention_WeightedDistToPlayerSq(actor, player, D_8015BBFC);
+                    inRange = Attention_ActorIsInRange(actor, var);
+                }
+                if ((var < D_8015BBF0) && inRange &&
+                    // #endregion
                     Attention_ActorOnScreen(play, actor) &&
                     (!BgCheck_CameraLineTest1(&play->colCtx, &player->actor.focus.pos, &actor->focus.pos, &sp70, &sp80,
                                               1, 1, 1, 1, &sp7C) ||

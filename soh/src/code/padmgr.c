@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/Enhancements/FirstPersonMod/FirstPersonMod.h"
 #include "vt.h"
 #include <string.h>
 
@@ -231,6 +232,12 @@ void PadMgr_ProcessInputs(PadMgr* padMgr) {
                 if (GameInteractor_DisableZTargetingActive()) {
                     input->cur.button &= ~(BTN_Z);
                 }
+
+                // #region SOH [FirstPersonMod] keyboard and mouse drive port 1
+                if (i == 0) {
+                    FirstPersonMod_ProcessInput(&input->cur);
+                }
+                // #endregion
 
                 uint32_t emulatedButtons = GameInteractor_GetEmulatedButtons();
                 if (emulatedButtons) {

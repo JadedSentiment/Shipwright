@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/Enhancements/FirstPersonMod/FirstPersonMod.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/gameplay_field_keep/gameplay_field_keep.h"
 #include "objects/object_link_boy/object_link_boy.h"
@@ -1444,6 +1445,10 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
         }
     }
 
+    // #region SOH [FirstPersonMod]
+    FirstPersonMod_OverrideLimbDraw(play, this, limbIndex, (void**)dList, pos, rot);
+    // #endregion
+
     GameInteractor_Should(VB_PLAYER_OVERRIDE_LIMB_DRAW, true, limbIndex, dList, thisx, play);
 
     if (GameInteractor_InvisibleLinkActive()) {
@@ -1491,6 +1496,10 @@ s32 Player_OverrideLimbDrawGameplayFirstPerson(PlayState* play, s32 limbIndex, G
             *dList = NULL;
         }
     }
+
+    // #region SOH [FirstPersonMod]
+    FirstPersonMod_OverrideLimbDraw(play, this, limbIndex, (void**)dList, pos, rot);
+    // #endregion
 
     GameInteractor_Should(VB_PLAYER_OVERRIDE_LIMB_DRAW, true, limbIndex, dList, thisx, play);
 

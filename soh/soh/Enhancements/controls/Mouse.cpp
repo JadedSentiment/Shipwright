@@ -6,6 +6,7 @@
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ShipInit.hpp"
+#include "soh/Enhancements/FirstPersonMod/FirstPersonMod.h"
 
 extern "C" {
 #include "z64player.h"
@@ -19,7 +20,7 @@ static Ship::Coords mouseCoordRel = {};
 #define CVAR_ENABLE_MOUSE_NAME CVAR_SETTING("EnableMouse")
 #define CVAR_ENABLE_MOUSE_DEFAULT 0
 #define CVAR_ENABLE_MOUSE_VALUE CVarGetInteger(CVAR_ENABLE_MOUSE_NAME, CVAR_ENABLE_MOUSE_DEFAULT)
-#define MOUSE_ENABLED (CVAR_ENABLE_MOUSE_VALUE && GetWindow()->IsMouseCaptured())
+#define MOUSE_ENABLED (CVAR_ENABLE_MOUSE_VALUE && GetWindow()->IsMouseCaptured() && !FirstPersonMod_IsEnabled())
 
 std::shared_ptr<Ship::Window> GetWindow() {
     return OTRGlobals::Instance->context->GetWindow();
@@ -33,6 +34,13 @@ void Mouse_UpdatePos() {
 void Mouse_UpdatePosRel() {
     mouseCoordRel = GetWindow()->GetMouseDelta();
 }
+
+// #region SOH [FirstPersonMod]
+void Mouse_GetDelta(s32* x, s32* y) {
+    *x = mouseCoordRel.x;
+    *y = mouseCoordRel.y;
+}
+// #endregion
 
 void Mouse_UpdateAll() {
     Mouse_UpdatePos();

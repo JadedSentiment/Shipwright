@@ -1,5 +1,6 @@
 ﻿#include "OTRGlobals.h"
 #include "OTRAudio.h"
+#include "soh/Enhancements/FirstPersonMod/FirstPersonMod.h"
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
@@ -1752,7 +1753,9 @@ extern "C" void Graph_StartFrame() {
         }
 #endif
         case KbScancode::LUS_KB_TAB: {
-            if (CVarGetInteger(CVAR_SETTING("Mods.AlternateAssetsHotkey"), 1)) {
+            // #region SOH [FirstPersonMod] Tab opens the pause menu in first person
+            if (CVarGetInteger(CVAR_SETTING("Mods.AlternateAssetsHotkey"), 1) && !FirstPersonMod_IsEnabled()) {
+                // #endregion
                 CVarSetInteger(CVAR_SETTING("AltAssets"), !CVarGetInteger(CVAR_SETTING("AltAssets"), 1));
             }
             break;

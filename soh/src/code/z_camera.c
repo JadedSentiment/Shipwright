@@ -1,5 +1,6 @@
 #include <libultraship/libultra.h>
 #include "global.h"
+#include "soh/Enhancements/FirstPersonMod/FirstPersonMod.h"
 #include "vt.h"
 
 #include <string.h>
@@ -7623,7 +7624,14 @@ Vec3s Camera_Update(Camera* camera) {
                      sCameraSettings[camera->setting].cameraModes[camera->mode].funcIdx, camera->unk_14C);
     }
 
-    if (sOOBTimer < 200) {
+    // #region SOH [FirstPersonMod] the first-person view replaces gameplay cameras (cutscenes keep theirs)
+    if ((sOOBTimer < 200) &&
+        FirstPersonMod_UpdateCamera(camera, sCameraSettings[camera->setting].cameraModes[camera->mode].funcIdx)) {
+        sCameraInterfaceFlags = 0;
+        sUpdateCameraDirection = true;
+    } else
+        // #endregion
+        if (sOOBTimer < 200) {
         sCameraFunctions[sCameraSettings[camera->setting].cameraModes[camera->mode].funcIdx](camera);
     } else if (camera->player != NULL) {
         OLib_Vec3fDiffToVecSphGeo(&eyeAtAngle, &camera->at, &camera->eye);

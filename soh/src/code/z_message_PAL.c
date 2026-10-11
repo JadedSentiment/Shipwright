@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/Enhancements/FirstPersonMod/FirstPersonMod.h"
 #include "message_data_static.h"
 #include "vt.h"
 
@@ -3155,6 +3156,10 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
         gOcarinaBtnIconATex,     gOcarinaBtnIconCDownTex, gOcarinaBtnIconCRightTex,
         gOcarinaBtnIconCLeftTex, gOcarinaBtnIconCUpTex,
     };
+    // #region SOH [FirstPersonMod] the A note is played with E
+    void* fpsANote = FirstPersonMod_GetOcarinaANoteTexture();
+    sOcarinaNoteTextures[0] = (fpsANote != NULL) ? fpsANote : (void*)gOcarinaBtnIconATex;
+    // #endregion
 
     // SoH [Cosmetics] The following Color_RGB8 were originally static
     Color_RGB8 sOcarinaNoteAPrimColors[2] = {

@@ -32,6 +32,7 @@
 #include "soh/frame_interpolation.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/savestate_serialize.h"
+#include "soh/Enhancements/FirstPersonMod/FirstPersonMod.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -3776,6 +3777,10 @@ void Player_UpdateZTargeting(Player* this, PlayState* play) {
         this->stateFlags1 &= ~PLAYER_STATE1_LOCK_ON_FORCED_TO_RELEASE;
     }
 
+    // #region SOH [FirstPersonMod] Link strafes (parallel mode) facing wherever you look
+    FirstPersonMod_UpdateParallel(this);
+    // #endregion
+
     if ((play->csCtx.state != CS_STATE_IDLE) || (this->csAction != 0) ||
         (this->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE)) ||
         (this->stateFlags3 & PLAYER_STATE3_FLYING_WITH_HOOKSHOT)) {
@@ -3817,8 +3822,11 @@ void Player_UpdateZTargeting(Player* this, PlayState* play) {
         if (!isTalking) {
             if (!(this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN) &&
                 ((this->heldItemAction != PLAYER_IA_FISHING_POLE) || (this->unk_860 == 0)) &&
+                // #region SOH [FirstPersonMod]
                 GameInteractor_Should(VB_TOGGLE_Z_TARGET_SWITCH_DIRECTION,
-                                      CHECK_BTN_ALL(sControlInput->press.button, BTN_Z))) {
+                                      FirstPersonMod_ZTargetPress(this,
+                                                                  CHECK_BTN_ALL(sControlInput->press.button, BTN_Z)))) {
+                // #endregion
 
                 if (this->actor.category == ACTORCAT_PLAYER) {
                     // The next lock-on actor defaults to the actor Navi is hovering over.
@@ -4946,11 +4954,18 @@ s32 Player_ActionHandler_12(Player* this, PlayState* play) {
         if ((this->actor.wallBgId != BGCHECK_SCENE) && (sTouchedWallFlags & WALL_FLAG_GRABBABLE)) {
             if (this->ledgeClimbDelayTimer >= 6) {
                 this->stateFlags2 |= PLAYER_STATE2_DO_ACTION_CLIMB;
-                if (CHECK_BTN_ALL(sControlInput->press.button, BTN_A)) {
+                // #region SOH [FirstPersonMod] climbing up is an interaction (E)
+                if (CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
+                    FirstPersonMod_AllowAPress(this, FPS_A_INTERACT)) {
+                    // #endregion
                     sp3C = 1;
                 }
             }
-        } else if ((this->ledgeClimbDelayTimer >= 6) || CHECK_BTN_ALL(sControlInput->press.button, BTN_A)) {
+        } else if ((this->ledgeClimbDelayTimer >= 6) ||
+                   // #region SOH [FirstPersonMod]
+                   (CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
+                    FirstPersonMod_AllowAPress(this, FPS_A_INTERACT))) {
+            // #endregion
             sp3C = 1;
         }
 
@@ -5327,7 +5342,10 @@ s32 Player_ActionHandler_1(Player* this, PlayState* play) {
     if ((this->doorType != PLAYER_DOORTYPE_NONE) &&
         (!(this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) ||
          ((this->heldActor != NULL) && (this->heldActor->id == ACTOR_EN_RU1)))) {
-        if ((CHECK_BTN_ALL(sControlInput->press.button, BTN_A) || (Player_Action_8084F9A0 == this->actionFunc)) &&
+        // #region SOH [FirstPersonMod] doors open with E
+        if (((CHECK_BTN_ALL(sControlInput->press.button, BTN_A) && FirstPersonMod_AllowAPress(this, FPS_A_INTERACT)) ||
+             (Player_Action_8084F9A0 == this->actionFunc)) &&
+            // #endregion
             GameInteractor_Should(VB_BE_ABLE_TO_OPEN_DOORS, true)) {
             doorActor = this->doorActor;
 
@@ -6179,7 +6197,10 @@ s32 Player_ActionHandler_Talk(Player* this, PlayState* play) {
 
                     if (talkOfferActor != NULL) {
                         this->stateFlags2 |= PLAYER_STATE2_CAN_ACCEPT_TALK_OFFER;
-                        if (CHECK_BTN_ALL(sControlInput->press.button, BTN_A) ||
+                        // #region SOH [FirstPersonMod] talking is E
+                        if ((CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
+                             FirstPersonMod_AllowAPress(this, FPS_A_INTERACT)) ||
+                            // #endregion
                             (talkOfferActor->flags & ACTOR_FLAG_TALK_OFFER_AUTO_ACCEPTED)) {
                             cUpTalkActor = NULL;
                         } else if (cUpTalkActor == NULL) {
@@ -6338,10 +6359,23 @@ void func_8083BCD0(Player* this, PlayState* play, s32 controlStickDirection) {
 s32 Player_ActionHandler_10(Player* this, PlayState* play) {
     s32 controlStickDirection;
 
-    if (CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
+    // #region SOH [FirstPersonMod] Space
+    if (CHECK_BTN_ALL(sControlInput->press.button, BTN_A) && FirstPersonMod_AllowAPress(this, FPS_A_MOVE) &&
+        // #endregion
         (play->roomCtx.curRoom.behaviorType1 != ROOM_BEHAVIOR_TYPE1_2) && (sFloorType != 7) &&
         (SurfaceType_GetFloorEffect(&play->colCtx, this->actor.floorPoly, this->actor.floorBgId) != FLOOR_EFFECT_1)) {
         controlStickDirection = this->controlStickDirections[this->controlStickDataIndex];
+
+        // #region SOH [FirstPersonMod] Without Focus, Space rolls in the direction you're moving
+        if (FirstPersonMod_RollInsteadOfHop(this, controlStickDirection)) {
+            if (controlStickDirection == PLAYER_STICK_DIR_NONE) {
+                return 0;
+            }
+            this->yaw = this->actor.shape.rot.y = sControlStickWorldYaw;
+            Player_SetupRoll(this, play);
+            return 1;
+        }
+        // #endregion
 
         if (controlStickDirection <= PLAYER_STICK_DIR_FORWARD) {
             if (Player_IsZTargeting(this)) {
@@ -6448,7 +6482,10 @@ void func_8083C148(Player* this, PlayState* play) {
  */
 s32 Player_ActionHandler_Roll(Player* this, PlayState* play) {
     if (!Player_UpdateHostileLockOn(this) && !sUpperBodyIsBusy && !(this->stateFlags1 & PLAYER_STATE1_ON_HORSE) &&
-        CHECK_BTN_ALL(sControlInput->press.button, BTN_A)) {
+        CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
+        // #region SOH [FirstPersonMod] Space rolls; standing still it does nothing (R handles the sword)
+        FirstPersonMod_AllowAPress(this, FPS_A_MOVE) && !FirstPersonMod_BlockStandingRoll(this)) {
+        // #endregion
         if (Player_TryRoll(this, play)) {
             return true;
         } else if ((this->putAwayCooldownTimer == 0) && (this->heldItemAction >= PLAYER_IA_SWORD_MASTER)) {
@@ -7161,7 +7198,10 @@ s32 Player_ActionHandler_3(Player* this, PlayState* play) {
     f32 sp34;
     s32 temp;
 
-    if ((rideActor != NULL) && CHECK_BTN_ALL(sControlInput->press.button, BTN_A)) {
+    // #region SOH [FirstPersonMod] mounting Epona is E
+    if ((rideActor != NULL) && CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
+        FirstPersonMod_AllowAPress(this, FPS_A_INTERACT)) {
+        // #endregion
         sp38 = Math_CosS(rideActor->actor.shape.rot.y);
         sp34 = Math_SinS(rideActor->actor.shape.rot.y);
 
@@ -7367,6 +7407,9 @@ s32 Player_ActionHandler_2(Player* this, PlayState* play) {
                 this->getItemEntry = (GetItemEntry)GET_ITEM_NONE;
             }
         } else if (CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
+                   // #region SOH [FirstPersonMod] picking things up and opening chests is E
+                   FirstPersonMod_AllowAPress(this, FPS_A_INTERACT) &&
+                   // #endregion
                    !(this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) &&
                    !(this->stateFlags2 & PLAYER_STATE2_UNDERWATER)) {
             if (this->getItemId != GI_NONE) {
@@ -7669,7 +7712,10 @@ s32 Player_TryEnteringCrawlspace(Player* this, PlayState* play, u32 interactWall
             // Give do-action prompt to "Enter on A" for the crawlspace
             this->stateFlags2 |= PLAYER_STATE2_DO_ACTION_ENTER;
 
-            if (CHECK_BTN_ALL(sControlInput->press.button, BTN_A)) {
+            // #region SOH [FirstPersonMod] entering crawlspaces is E
+            if (CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
+                FirstPersonMod_AllowAPress(this, FPS_A_INTERACT)) {
+                // #endregion
                 // Enter Crawlspace
                 f32 wallPolyNormX = COLPOLY_GET_NORMAL(wallPoly->normal.x);
                 f32 wallPolyNormZ = COLPOLY_GET_NORMAL(wallPoly->normal.z);
@@ -7825,7 +7871,9 @@ s32 Player_ActionHandler_5(Player* this, PlayState* play) {
 
             this->stateFlags2 |= PLAYER_STATE2_DO_ACTION_GRAB;
 
-            if (CHECK_BTN_ALL(sControlInput->cur.button, BTN_A)) {
+            // #region SOH [FirstPersonMod] grabbing blocks is E
+            if (CHECK_BTN_ALL(sControlInput->cur.button, BTN_A) && FirstPersonMod_AllowAHeld(this, FPS_A_INTERACT)) {
+                // #endregion
 
                 if ((this->actor.wallBgId != BGCHECK_SCENE) &&
                     ((wallPolyActor = DynaPoly_GetActor(&play->colCtx, this->actor.wallBgId)) != NULL)) {
@@ -7976,6 +8024,9 @@ s32 func_8083FD78(Player* this, f32* arg1, s16* arg2, PlayState* play) {
                     &this->actor.focus.rot.x,
                     relStickY * (CVarGetInteger(CVAR_SETTING("Controls.InvertZAimingYAxis"), 1) ? 1 : -1) * 240.0f, 14,
                     4000, 30);
+                // #region SOH [FirstPersonMod]
+                FirstPersonMod_OverrideZAimPitch(this);
+                // #endregion
                 func_80836AB8(this, 1);
             }
             // #endregion
@@ -7984,6 +8035,9 @@ s32 func_8083FD78(Player* this, f32* arg1, s16* arg2, PlayState* play) {
                 func_8083DB98(this, 1);
             } else {
                 Math_SmoothStepToS(&this->actor.focus.rot.x, sControlInput->rel.stick_y * 240.0f, 14, 4000, 30);
+                // #region SOH [FirstPersonMod]
+                FirstPersonMod_OverrideZAimPitch(this);
+                // #endregion
                 func_80836AB8(this, 1);
             }
         }
@@ -12378,6 +12432,9 @@ void Player_DrawGameplay(PlayState* play, Player* this, s32 lod, Gfx* cullDList,
         }
 
         if (!GameInteractor_InvisibleLinkActive() &&
+            // #region SOH [FirstPersonMod]
+            !FirstPersonMod_HideHeadAttachments(this) &&
+            // #endregion
             GameInteractor_Should(VB_DRAW_PLAYER_MASK, true, this->currentMask, play)) {
             if (this->currentMask != PLAYER_MASK_BUNNY || !CVarGetInteger(CVAR_ENHANCEMENT("HideBunnyHood"), 0)) {
                 gSPDisplayList(POLY_OPA_DISP++, sMaskDlists[this->currentMask - 1]);
@@ -13436,7 +13493,10 @@ s32 func_8084C9BC(Player* this, PlayState* play) {
             this->stateFlags2 |= PLAYER_STATE2_DO_ACTION_DOWN;
 
             if (EN_HORSE_CHECK_1(rideActor) ||
-                (EN_HORSE_CHECK_4(rideActor) && CHECK_BTN_ALL(sControlInput->press.button, BTN_A))) {
+                // #region SOH [FirstPersonMod] getting off Epona is E
+                (EN_HORSE_CHECK_4(rideActor) && CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
+                 FirstPersonMod_AllowAPress(this, FPS_A_INTERACT))) {
+                // #endregion
                 rideActor->actor.child = NULL;
                 Player_SetupActionPreserveAnimMovement(play, this, Player_Action_8084D3E4, 0);
                 this->unk_878 = sp34 - rideActor->actor.world.pos.y;
@@ -16610,3 +16670,22 @@ void Player_StartTalking(PlayState* play, Actor* actor) {
     F(sHeldItemButtonIsHeldDown)
 
 SHIP_SAVESTATE_DEFINE(Player, PLAYER_SHIP_SAVESTATE_FIELDS)
+
+// #region SOH [FirstPersonMod] helpers the mod needs from this file
+s32 Player_FirstPersonMod_IsMeleeAttacking(Player* this) {
+    return (this->actionFunc == Player_Action_808502D0) || (this->meleeWeaponState != 0) ||
+           (this->stateFlags2 & PLAYER_STATE2_SPIN_ATTACKING);
+}
+
+s32 Player_FirstPersonMod_IsRolling(Player* this) {
+    return this->actionFunc == Player_Action_Roll;
+}
+
+void Player_FirstPersonMod_ReleaseLockOn(Player* this) {
+    Player_ReleaseLockOn(this);
+}
+
+void Player_FirstPersonMod_SetParallel(Player* this) {
+    Player_SetParallel(this);
+}
+// #endregion
