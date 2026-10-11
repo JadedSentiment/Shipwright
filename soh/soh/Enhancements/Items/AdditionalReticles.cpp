@@ -2,6 +2,7 @@
 
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ShipInit.hpp"
+#include "soh/Enhancements/FirstPersonMod/FirstPersonMod.h"
 
 extern "C" {
 #include "z64.h"
@@ -14,11 +15,12 @@ extern SaveContext gSaveContext;
 
 #define CVAR_BOW_RETICLE_NAME CVAR_ENHANCEMENT("BowReticle")
 #define CVAR_BOW_RETICLE_DEFAULT 0
-#define CVAR_BOW_RETICLE_VALUE CVarGetInteger(CVAR_BOW_RETICLE_NAME, CVAR_BOW_RETICLE_DEFAULT)
+#define CVAR_BOW_RETICLE_VALUE (CVarGetInteger(CVAR_BOW_RETICLE_NAME, CVAR_BOW_RETICLE_DEFAULT) || FirstPersonMod_IsEnabled())
 
 #define CVAR_BOOMERANG_RETICLE_NAME CVAR_ENHANCEMENT("BoomerangReticle")
 #define CVAR_BOOMERANG_RETICLE_DEFAULT 0
-#define CVAR_BOOMERANG_RETICLE_VALUE CVarGetInteger(CVAR_BOOMERANG_RETICLE_NAME, CVAR_BOOMERANG_RETICLE_DEFAULT)
+#define CVAR_BOOMERANG_RETICLE_VALUE \
+    (CVarGetInteger(CVAR_BOOMERANG_RETICLE_NAME, CVAR_BOOMERANG_RETICLE_DEFAULT) || FirstPersonMod_IsEnabled())
 
 // OTRTODO: Figure out why this value works/what this value should be
 // This was originally obtained by working down from FLT_MAX until the math
@@ -73,5 +75,6 @@ void RegisterAdditionalReticles() {
     });
 }
 
-static RegisterShipInitFunc initFunc(RegisterAdditionalReticles,
-                                     { CVAR_ENHANCEMENT("BowReticle"), CVAR_ENHANCEMENT("BoomerangReticle") });
+static RegisterShipInitFunc initFunc(RegisterAdditionalReticles, { CVAR_ENHANCEMENT("BowReticle"),
+                                                                   CVAR_ENHANCEMENT("BoomerangReticle"),
+                                                                   "gFirstPerson.Enabled" });

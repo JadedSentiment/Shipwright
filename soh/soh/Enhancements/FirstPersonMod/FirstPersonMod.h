@@ -58,6 +58,14 @@ void FirstPersonMod_OverrideLimbDraw(struct PlayState* play, struct Player* play
 // z_player.c: masks would sit around the camera, so they're skipped for the local first-person player.
 s32 FirstPersonMod_HideHeadAttachments(struct Player* player);
 
+// z_player_lib.c: a readied bottle / ocarina item action to show in Link's hand, or -1.
+s32 FirstPersonMod_GetCosmeticHeldItem(struct Player* player);
+
+// z_player.c: strafing starts straight sideways instead of curving in from forward.
+s32 FirstPersonMod_SnapStrafeYaw(struct Player* player);
+// z_player.c: aim direction for thrown items (boomerang). Returns false when the game should aim normally.
+s32 FirstPersonMod_GetAimAngles(struct Player* player, s16* yaw, s16* pitch);
+
 // z_message_PAL.c: texture for the A-button ocarina note ("E" glyph), or NULL to keep vanilla.
 void* FirstPersonMod_GetOcarinaANoteTexture(void);
 

@@ -2,7 +2,9 @@
 
 #include "FirstPersonModInternal.h"
 
+#include <memory>
 #include <string>
+#include <vector>
 
 #include <imgui.h>
 #include <libultraship/bridge/consolevariablebridge.h>
@@ -199,6 +201,52 @@ void KeyBindingsWidget(WidgetInfo& info) {
     }
 }
 
+void AddAgeSliders(std::shared_ptr<SohGui::SohMenu> menu, WidgetPath& path, const char* title, const char* cvarAge,
+                   const char* tag) {
+    // CVar names have to outlive the menu, so they're kept in static storage
+    static std::vector<std::unique_ptr<std::string>> sNames;
+    auto cvar = [&](const char* key) {
+        sNames.push_back(std::make_unique<std::string>(std::string(FPS_CVAR("")) + cvarAge + "." + key));
+        return sNames.back()->c_str();
+    };
+    auto label = [&](const char* text) { return std::string(text) + "##" + tag; };
+
+    menu->AddWidget(path, title, WIDGET_SEPARATOR_TEXT);
+    menu->AddWidget(path, label("Camera Height: %.1f"), WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(cvar("CamHeight"))
+        .RaceDisable(false)
+        .Options(FloatSliderOptions().Min(-30.0f).Max(30.0f).DefaultValue(0.0f).Step(0.5f).Format("%.1f").Tooltip(
+            "Raises or lowers your eyes from Link's head height."));
+    menu->AddWidget(path, label("Camera Forward: %.1f"), WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(cvar("CamForward"))
+        .RaceDisable(false)
+        .Options(FloatSliderOptions().Min(-20.0f).Max(20.0f).DefaultValue(0.0f).Step(0.5f).Format("%.1f").Tooltip(
+            "Moves your eyes forward or back from Link's head."));
+    menu->AddWidget(path, label("Arm Raise: %.0f deg"), WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(cvar("ArmRaise"))
+        .RaceDisable(false)
+        .Options(FloatSliderOptions().Min(-30.0f).Max(80.0f).DefaultValue(12.0f).Step(1.0f).Format("%.0f deg").Tooltip(
+            "Lifts Link's arms up into view."));
+    menu->AddWidget(path, label("Arm Forward: %.1f"), WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(cvar("ArmForward"))
+        .RaceDisable(false)
+        .Options(FloatSliderOptions().Min(-20.0f).Max(30.0f).DefaultValue(4.0f).Step(0.5f).Format("%.1f"));
+    menu->AddWidget(path, label("Arm Height: %.1f"), WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(cvar("ArmHeight"))
+        .RaceDisable(false)
+        .Options(FloatSliderOptions().Min(-20.0f).Max(20.0f).DefaultValue(-1.0f).Step(0.5f).Format("%.1f"));
+    menu->AddWidget(path, label("Arm Side: %.1f"), WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(cvar("ArmSide"))
+        .RaceDisable(false)
+        .Options(FloatSliderOptions().Min(-15.0f).Max(15.0f).DefaultValue(0.0f).Step(0.5f).Format("%.1f").Tooltip(
+            "Shifts the arms left or right."));
+    menu->AddWidget(path, label("Arms Follow Look: %.0f%%"), WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(cvar("ArmPitchFollow"))
+        .RaceDisable(false)
+        .Options(FloatSliderOptions().Min(0.0f).Max(1.0f).DefaultValue(0.6f).IsPercentage().Format("%.0f%%").Tooltip(
+            "How much the arms tilt with you when you look up or down."));
+}
+
 void RegisterFirstPersonMenu() {
     auto menu = SohGui::mSohMenu;
     menu->AddSidebarEntry("Enhancements", "First Person", 3);
@@ -274,25 +322,15 @@ void RegisterFirstPersonMenu() {
         .RaceDisable(false)
         .Options(FloatSliderOptions().Min(0.0f).Max(1.0f).DefaultValue(0.3f).IsPercentage().Format("%.0f%%"));
 
-    menu->AddWidget(path, "Viewmodel", WIDGET_SEPARATOR_TEXT);
-    menu->AddWidget(path, "Arm Raise: %.0f deg", WIDGET_CVAR_SLIDER_FLOAT)
-        .CVar(FPS_CVAR("Viewmodel.Raise"))
+    menu->AddWidget(path, "Mask Vignette: %.0f%%", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(FPS_CVAR("MaskVignette"))
         .RaceDisable(false)
-        .Options(FloatSliderOptions().Min(-30.0f).Max(80.0f).DefaultValue(22.0f).Step(1.0f).Format("%.0f deg").Tooltip(
-            "How far Link's arms lift into view while holding something."));
-    menu->AddWidget(path, "Arm Forward: %.1f", WIDGET_CVAR_SLIDER_FLOAT)
-        .CVar(FPS_CVAR("Viewmodel.Forward"))
-        .RaceDisable(false)
-        .Options(FloatSliderOptions().Min(-20.0f).Max(30.0f).DefaultValue(6.0f).Step(0.5f).Format("%.1f"));
-    menu->AddWidget(path, "Arm Height: %.1f", WIDGET_CVAR_SLIDER_FLOAT)
-        .CVar(FPS_CVAR("Viewmodel.Height"))
-        .RaceDisable(false)
-        .Options(FloatSliderOptions().Min(-20.0f).Max(20.0f).DefaultValue(-3.0f).Step(0.5f).Format("%.1f"));
-    menu->AddWidget(path, "Arms Follow Look: %.0f%%", WIDGET_CVAR_SLIDER_FLOAT)
-        .CVar(FPS_CVAR("Viewmodel.PitchFollow"))
-        .RaceDisable(false)
-        .Options(FloatSliderOptions().Min(0.0f).Max(1.0f).DefaultValue(0.8f).IsPercentage().Format("%.0f%%").Tooltip(
-            "How much the arms tilt with you when you look up or down."));
+        .Options(FloatSliderOptions().Min(0.0f).Max(1.0f).DefaultValue(0.85f).IsPercentage().Format("%.0f%%").Tooltip(
+            "How dark the edges of the screen get while you're wearing a mask."));
+
+    // Body proportions: one set for each age
+    AddAgeSliders(menu, path, "Young Link", "Child", "Child");
+    AddAgeSliders(menu, path, "Adult Link", "Adult", "Adult");
 
     // Column 3: keys
     path.column = SECTION_COLUMN_3;

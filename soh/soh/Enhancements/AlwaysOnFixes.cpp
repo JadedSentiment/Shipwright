@@ -3,6 +3,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/game-interactor/vanilla-behavior/GIVanillaBehavior.h"
 #include "soh/ShipInit.hpp"
+#include "soh/Enhancements/FirstPersonMod/FirstPersonMod.h"
 
 extern "C" {
 #include "functions.h"
@@ -152,7 +153,7 @@ void RegisterAlwaysOnFixes() {
                 *camMode = CAM_MODE_AIM_ADULT; // Fix child Hookshot aiming in lab (CAM_MODE_AIM_CHILD is invalid there)
             }
         } else if (*heldItemAction == PLAYER_IA_BOOMERANG) {
-            if (CVarGetInteger(CVAR_ENHANCEMENT("BoomerangFirstPerson"), false)) {
+            if (CVarGetInteger(CVAR_ENHANCEMENT("BoomerangFirstPerson"), false) || FirstPersonMod_IsEnabled()) {
                 *camMode = CAM_MODE_FIRST_PERSON;
             }
         }

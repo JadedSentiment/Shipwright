@@ -3224,7 +3224,7 @@ s32 func_808358F0(Player* this, PlayState* play) {
                                     this->skelAnime.jointTable);
     } else {
         // #region SOH [Enhancement]
-        if (!CVarGetInteger(CVAR_ENHANCEMENT("BoomerangReticle"), 0)) {
+        if (!CVarGetInteger(CVAR_ENHANCEMENT("BoomerangReticle"), 0) && !FirstPersonMod_IsEnabled()) {
             // #endregion
             LinkAnimation_Update(play, &this->upperSkelAnime);
         }
@@ -3249,9 +3249,16 @@ s32 func_808359FC(Player* this, PlayState* play) {
         f32 posX = (Math_SinS(this->actor.shape.rot.y) * 10.0f) + this->actor.world.pos.x;
         f32 posZ = (Math_CosS(this->actor.shape.rot.y) * 10.0f) + this->actor.world.pos.z;
         s32 yaw = (this->focusActor != NULL) ? this->actor.shape.rot.y + 14000 : this->actor.shape.rot.y;
+        // #region SOH [FirstPersonMod] throw where you're looking
+        s16 fpsYaw;
+        s16 fpsPitch = this->actor.focus.rot.x;
+        if (FirstPersonMod_GetAimAngles(this, &fpsYaw, &fpsPitch)) {
+            yaw = fpsYaw;
+        }
         EnBoom* boomerang =
             (EnBoom*)Actor_Spawn(&play->actorCtx, play, ACTOR_EN_BOOM, posX, this->actor.world.pos.y + 30.0f, posZ,
-                                 this->actor.focus.rot.x, yaw, 0, 0);
+                                 fpsPitch, yaw, 0, 0);
+        // #endregion
 
         this->boomerangActor = &boomerang->actor;
 
@@ -8754,6 +8761,14 @@ void Player_Action_8084193C(Player* this, PlayState* play) {
 
         func_80840138(this, speedTarget, yawTarget);
 
+        // #region SOH [FirstPersonMod] strafe straight sideways instead of curving in from forward
+        if (FirstPersonMod_SnapStrafeYaw(this)) {
+            this->yaw = yawTarget;
+            Math_AsymStepToF(&this->linearVelocity, speedTarget * 0.9f, 2.0f, 3.0f);
+            return;
+        }
+        // #endregion
+
         temp2 = yawTarget - this->yaw;
         temp3 = ABS(temp2);
 
@@ -11534,7 +11549,7 @@ void Player_UpdateCamAndSeqModes(PlayState* play, Player* this) {
                 camMode = CAM_MODE_CHARGE;
             } else if (this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN) {
                 // #region SOH [Enhancement]
-                if (CVarGetInteger(CVAR_ENHANCEMENT("BoomerangFirstPerson"), 0)) {
+                if (CVarGetInteger(CVAR_ENHANCEMENT("BoomerangFirstPerson"), 0) || FirstPersonMod_IsEnabled()) {
                     // Avoid camera jumps by switching  to normal cam to exit the first person camera,
                     // before following the boomerang
                     if (Play_GetCamera(play, CAM_ID_MAIN)->mode == CAM_MODE_FIRST_PERSON) {

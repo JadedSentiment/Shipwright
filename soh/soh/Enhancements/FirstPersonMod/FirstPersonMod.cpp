@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include <string>
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -86,17 +87,33 @@ bool CfgCrosshair() {
 int CfgBodyMode() {
     return CVarGetInteger(FPS_CVAR("BodyMode"), 0);
 }
+// Child and adult Link have their own copy of the body-proportion settings ("gFirstPerson.Child.*" / ".Adult.*").
+// Older single values under "gFirstPerson.Viewmodel.*" are used as the starting point when an age has none yet.
+float AgeCfg(const char* key, const char* legacyKey, float def) {
+    std::string name = std::string(LINK_IS_ADULT ? FPS_CVAR("Adult.") : FPS_CVAR("Child.")) + key;
+    float fallback = (legacyKey != nullptr) ? CVarGetFloat(legacyKey, def) : def;
+    return CVarGetFloat(name.c_str(), fallback);
+}
 float CfgVmRaise() {
-    return CVarGetFloat(FPS_CVAR("Viewmodel.Raise"), 22.0f);
+    return AgeCfg("ArmRaise", FPS_CVAR("Viewmodel.Raise"), 12.0f);
 }
 float CfgVmForward() {
-    return CVarGetFloat(FPS_CVAR("Viewmodel.Forward"), 6.0f);
+    return AgeCfg("ArmForward", FPS_CVAR("Viewmodel.Forward"), 4.0f);
 }
 float CfgVmHeight() {
-    return CVarGetFloat(FPS_CVAR("Viewmodel.Height"), -3.0f);
+    return AgeCfg("ArmHeight", FPS_CVAR("Viewmodel.Height"), -1.0f);
+}
+float CfgVmSide() {
+    return AgeCfg("ArmSide", nullptr, 0.0f);
 }
 float CfgVmPitchFollow() {
-    return CVarGetFloat(FPS_CVAR("Viewmodel.PitchFollow"), 0.8f);
+    return AgeCfg("ArmPitchFollow", FPS_CVAR("Viewmodel.PitchFollow"), 0.6f);
+}
+float CfgCamHeight() {
+    return AgeCfg("CamHeight", nullptr, 0.0f);
+}
+float CfgCamForward() {
+    return AgeCfg("CamForward", nullptr, 0.0f);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -337,6 +354,9 @@ int sPendingReadyTimer = 0;
 bool sPendingSword = false;
 int sPendingSwordTimer = 0;
 int sSuppressUseTimer = 0;
+int sPulseSlot = 0;       // press this slot's button for one frame (toggle items: Lens, masks)
+bool sPendingPutAway = false;
+int sPendingPutAwayTimer = 0;
 
 const u16 kSlotButtons[8] = { 0, BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT, BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
@@ -389,6 +409,19 @@ bool IsHeldAction(s32 ia) {
         return true;
     }
     return IsSwordAction(ia) || IsRangedAction(ia);
+}
+
+bool IsBottleAction(s32 ia) {
+    return ia >= PLAYER_IA_BOTTLE && ia <= PLAYER_IA_BOTTLE_FAIRY;
+}
+
+bool IsOcarinaAction(s32 ia) {
+    return ia == PLAYER_IA_OCARINA_FAIRY || ia == PLAYER_IA_OCARINA_OF_TIME;
+}
+
+// Items that switch on and off rather than being aimed or swung: they toggle the moment you press their key.
+bool IsToggleAction(s32 ia) {
+    return ia == PLAYER_IA_LENS_OF_TRUTH || (ia >= PLAYER_IA_MASK_KEATON && ia <= PLAYER_IA_MASK_TRUTH);
 }
 
 bool IsTalking(Player* player) {
@@ -552,14 +585,28 @@ void ReadySlot(int slot) {
     }
     Player* player = LocalPlayer();
     s32 ia = Player_ItemToItemAction(SlotItem(slot));
+    if (IsToggleAction(ia)) {
+        sPulseSlot = slot; // Lens and masks switch on/off right away and don't replace what you're holding
+        return;
+    }
     if (sReadiedSlot != slot) {
         sLastSlot = sReadiedSlot;
     }
     sReadiedSlot = slot;
+    sPendingPutAway = false;
+    if (player == nullptr) {
+        return;
+    }
     // Held items (bow, hookshot, sticks...) are pulled out right away so you can see what's ready.
-    if (IsHeldAction(ia) && player != nullptr && player->heldItemAction != ia) {
+    if (IsHeldAction(ia) && player->heldItemAction != ia) {
         sPendingReadySlot = slot;
         sPendingReadyTimer = 10;
+    } else if (!IsHeldAction(ia) && player->heldItemAction != PLAYER_IA_NONE &&
+               player->heldItemAction != PLAYER_IA_SWORD_CS) {
+        // Bottles, the ocarina and other one-shot items: put away whatever is in hand. The readied item is then
+        // shown in Link's hand until you use it.
+        sPendingPutAway = true;
+        sPendingPutAwayTimer = 10;
     }
 }
 
@@ -572,8 +619,8 @@ bool WantParallel(Player* player) {
     }
     if (player->stateFlags1 &
         (PLAYER_STATE1_IN_WATER | PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_CLIMBING_LADDER |
-         PLAYER_STATE1_HANGING_OFF_LEDGE | PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_CARRYING_ACTOR |
-         PLAYER_STATE1_TALKING | PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_DEAD)) {
+         PLAYER_STATE1_HANGING_OFF_LEDGE | PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_TALKING |
+         PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_DEAD)) {
         return false;
     }
     if (player->stateFlags2 & (PLAYER_STATE2_CRAWLING | PLAYER_STATE2_GRABBING_DYNAPOLY | PLAYER_STATE2_UNDERWATER)) {
@@ -644,6 +691,10 @@ void BuildGameplayPad(OSContPad* pad, Player* player) {
     if (d[ACT_ATTACK]) {
         pad->button |= (sReadiedSlot != 0) ? kSlotButtons[sReadiedSlot] : BTN_B;
     }
+    if (sPulseSlot != 0) {
+        pad->button |= kSlotButtons[sPulseSlot];
+        sPulseSlot = 0;
+    }
 
     // Right click: shield. Ctrl: crouch behind the shield (needs Link out of strafing mode)
     sCrouchHeld = d[ACT_CROUCH];
@@ -683,6 +734,9 @@ void BuildGameplayPad(OSContPad* pad, Player* player) {
     }
     if (sPendingSwordTimer > 0 && --sPendingSwordTimer == 0) {
         sPendingSword = false;
+    }
+    if (sPendingPutAwayTimer > 0 && --sPendingPutAwayTimer == 0) {
+        sPendingPutAway = false;
     }
     if (sSuppressUseTimer > 0) {
         sSuppressUseTimer--;
@@ -1047,6 +1101,10 @@ Vec3f ComputeEye(Player* player) {
     float bobX = sinf(sBobPhase) * 1.0f * bob * sBobAmountSmoothed;
     offset = Add(offset, Add(V3(0, bobY + sLandOffset, 0), Scale(RightFromYaw(sYaw), bobX)));
 
+    // Camera height / forward sliders (per age), forward along the flat look direction
+    offset.y += CfgCamHeight();
+    offset = Add(offset, Scale(DirFromAngles(sYaw, 0.0f), CfgCamForward()));
+
     return Add(base, offset);
 }
 
@@ -1064,8 +1122,7 @@ void SteerTowards(Vec3f eye, Vec3f target, float rate) {
 
 void UpdatePoseWeight(Player* player) {
     float target = 0.0f;
-    bool holdingSomething = player->heldItemAction != PLAYER_IA_NONE && player->heldItemAction != PLAYER_IA_SWORD_CS;
-    if (holdingSomething && !Player_FirstPersonMod_IsMeleeAttacking(player) && player->meleeWeaponState == 0 &&
+    if (!Player_FirstPersonMod_IsMeleeAttacking(player) && player->meleeWeaponState == 0 &&
         player->unk_6AD == 0 && !Player_FirstPersonMod_IsRolling(player) &&
         !(player->stateFlags1 &
           (PLAYER_STATE1_SHIELDING | PLAYER_STATE1_CHARGING_SPIN_ATTACK | PLAYER_STATE1_CLIMBING_LADDER |
@@ -1210,6 +1267,16 @@ void RegisterItemHooks() {
                 *buttonIndex = 0;
                 *item = B_BTN_ITEM;
                 sSuppressUseTimer = 20;
+            }
+            return;
+        }
+
+        if (sPendingPutAway) {
+            sPendingPutAway = false;
+            sPendingPutAwayTimer = 0;
+            if (player->heldItemAction != PLAYER_IA_NONE) {
+                Player_UseItem(gPlayState, player, ITEM_NONE);
+                *item = ITEM_NONE;
             }
             return;
         }
@@ -1361,18 +1428,17 @@ void ApplyViewmodelTransform(Player* player) {
     float raise = CfgVmRaise() * kDegToBinang * sPoseWeight;
     float pitchAngle = (sPitch * pitchFollow + raise) * kBinangToRad;
     Vec3f right = RightFromYaw(sViewYaw);
-    // Rotating forward toward up is a rotation around -right in this right-handed frame
-    SetRotation(&rotP, Scale(right, -1.0f), pitchAngle);
+    // right = forward x up, so a positive rotation around +right tips forward toward up
+    SetRotation(&rotP, right, pitchAngle);
 
     SkinMatrix_MtxFMtxFMult(&rotP, &rotY, &rot);
 
     // Offset in view space: forward/height from the pose, plus sway and bob
     Vec3f fwd = DirFromAngles(sViewYaw, sPitch);
-    Vec3f up = Cross(Scale(right, -1.0f), fwd);
-    up = Norm(up);
+    Vec3f up = Norm(Cross(right, fwd));
     float bob = Clampf(CfgBob(), 0.0f, 1.0f) * sBobAmountSmoothed;
     Vec3f offset = Add(Scale(fwd, CfgVmForward() * sPoseWeight), Scale(up, CfgVmHeight() * sPoseWeight));
-    offset = Add(offset, Scale(right, sSwayOffset.x + sinf(sBobPhase) * 0.6f * bob));
+    offset = Add(offset, Scale(right, CfgVmSide() * sPoseWeight + sSwayOffset.x + sinf(sBobPhase) * 0.6f * bob));
     offset = Add(offset, Scale(up, sSwayOffset.y + sinf(sBobPhase * 2.0f) * 0.5f * bob));
 
     // W(v) = rot * (v - pivot) + pivot + offset
@@ -1416,15 +1482,48 @@ extern "C" void FirstPersonMod_OverrideLimbDraw(PlayState* play, Player* player,
     }
 }
 
+extern "C" s32 FirstPersonMod_GetCosmeticHeldItem(Player* player) {
+    if (!sCamActive || !IsLocalPlayer(player) || sMode != MODE_GAMEPLAY || sReadiedSlot == 0) {
+        return -1;
+    }
+    s32 ia = Player_ItemToItemAction(SlotItem(sReadiedSlot));
+    if (!IsBottleAction(ia) && !IsOcarinaAction(ia)) {
+        return -1;
+    }
+    // Only while nothing else is in hand and the item isn't being used right now
+    if ((player->heldItemAction != PLAYER_IA_NONE && player->heldItemAction != PLAYER_IA_SWORD_CS) ||
+        player->itemAction != player->heldItemAction || player->unk_6AD != 0 ||
+        (player->stateFlags1 & (PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_IN_CUTSCENE |
+                                PLAYER_STATE1_SWINGING_BOTTLE)) ||
+        (player->stateFlags2 & PLAYER_STATE2_OCARINA_PLAYING)) {
+        return -1;
+    }
+    return ia;
+}
+
+extern "C" s32 FirstPersonMod_SnapStrafeYaw(Player* player) {
+    return sCamActive && IsLocalPlayer(player) && sMode == MODE_GAMEPLAY && player->focusActor == nullptr;
+}
+
+extern "C" s32 FirstPersonMod_GetAimAngles(Player* player, s16* yaw, s16* pitch) {
+    if (!sCamActive || !IsLocalPlayer(player) || sMode != MODE_GAMEPLAY || player->focusActor != nullptr) {
+        return false;
+    }
+    *yaw = (s16)sYaw;
+    *pitch = (s16)(-sPitch);
+    return true;
+}
+
 // Head offset for the next camera update, taken right after Link is drawn.
 static void CaptureHeadOffset() {
     Player* player = LocalPlayer();
     if (player == nullptr || !sCamActive) {
         return;
     }
-    sHeadOffset = Sub(player->actor.focus.pos, sDrawWorldPos);
-    // Guard against a bad first frame
-    if (Len(sHeadOffset) < 120.0f) {
+    Vec3f offset = Sub(player->actor.focus.pos, player->actor.world.pos);
+    // Ignore frames where the head position wasn't updated (Link not drawn, warping)
+    if (Len(offset) < 120.0f) {
+        sHeadOffset = offset;
         sHeadOffsetValid = true;
     }
 }
@@ -1507,10 +1606,43 @@ class FirstPersonOverlay final : public Ship::GuiWindow {
 
     void Draw() override {
         SampleInputRenderRate();
+        DrawMaskVignette();
         DrawCrosshair();
     }
 
   private:
+    // A dark frame around the screen while a mask is worn, so you can tell it's on
+    void DrawMaskVignette() {
+        if (!CfgEnabled() || !sCamActive || gPlayState == nullptr) {
+            return;
+        }
+        Player* player = LocalPlayer();
+        float target = (player != nullptr && player->currentMask != PLAYER_MASK_NONE)
+                           ? Clampf(CVarGetFloat(FPS_CVAR("MaskVignette"), 0.85f), 0.0f, 1.0f)
+                           : 0.0f;
+        mVignette = Lerp(mVignette, target, 0.15f);
+        if (mVignette < 0.01f) {
+            return;
+        }
+        ImGuiWindow* game = ImGui::FindWindowByName("Main Game");
+        if (game == nullptr) {
+            return;
+        }
+        ImDrawList* draw = ImGui::GetForegroundDrawList(game->Viewport);
+        ImVec2 a = game->Pos;
+        ImVec2 b = ImVec2(game->Pos.x + game->Size.x, game->Pos.y + game->Size.y);
+        float thick = std::min(game->Size.x, game->Size.y) * 0.28f;
+        ImU32 dark = IM_COL32(0, 0, 0, (int)(235 * mVignette));
+        ImU32 clear = IM_COL32(0, 0, 0, 0);
+        // top, bottom, left, right gradients
+        draw->AddRectFilledMultiColor(a, ImVec2(b.x, a.y + thick), dark, dark, clear, clear);
+        draw->AddRectFilledMultiColor(ImVec2(a.x, b.y - thick), b, clear, clear, dark, dark);
+        draw->AddRectFilledMultiColor(a, ImVec2(a.x + thick, b.y), dark, clear, clear, dark);
+        draw->AddRectFilledMultiColor(ImVec2(b.x - thick, a.y), b, clear, dark, dark, clear);
+    }
+
+    float mVignette = 0.0f;
+
     void DrawCrosshair() {
         if (!CfgEnabled() || !CfgCrosshair() || !sCamActive || sMode != MODE_GAMEPLAY || gPlayState == nullptr) {
             return;

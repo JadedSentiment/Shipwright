@@ -1447,6 +1447,20 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
 
     // #region SOH [FirstPersonMod]
     FirstPersonMod_OverrideLimbDraw(play, this, limbIndex, (void**)dList, pos, rot);
+    {
+        // A readied bottle or ocarina is shown in Link's hand until it's used
+        s32 fpsItem = FirstPersonMod_GetCosmeticHeldItem(this);
+        if (fpsItem >= 0) {
+            if ((limbIndex == PLAYER_LIMB_R_HAND) &&
+                ((fpsItem == PLAYER_IA_OCARINA_FAIRY) || (fpsItem == PLAYER_IA_OCARINA_OF_TIME))) {
+                Gfx** fpsDLs =
+                    (fpsItem == PLAYER_IA_OCARINA_FAIRY) ? sPlayerRightHandOcarinaDLs : sPlayerRightHandOotDLs;
+                *dList = ResourceMgr_LoadGfxByName(fpsDLs[gSaveContext.linkAge + sDListsLodOffset]);
+            } else if ((limbIndex == PLAYER_LIMB_L_HAND) && (Player_ActionToBottle(this, fpsItem) >= 0)) {
+                *dList = ResourceMgr_LoadGfxByName(sPlayerLeftHandBottleDLs[gSaveContext.linkAge + sDListsLodOffset]);
+            }
+        }
+    }
     // #endregion
 
     GameInteractor_Should(VB_PLAYER_OVERRIDE_LIMB_DRAW, true, limbIndex, dList, thisx, play);
@@ -1845,6 +1859,18 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
 
             func_80090A28(this, spE4);
             func_800906D4(play, this, spE4);
+        } else if ((*dList != NULL) && (this->leftHandType != PLAYER_MODELTYPE_LH_BOTTLE) &&
+                   (Player_ActionToBottle(this, FirstPersonMod_GetCosmeticHeldItem(this)) >= 0)) {
+            // #region SOH [FirstPersonMod] readied bottle shown in hand
+            Color_RGB8* bottleColor =
+                &sBottleColors[Player_ActionToBottle(this, FirstPersonMod_GetCosmeticHeldItem(this))];
+
+            OPEN_DISPS(play->state.gfxCtx);
+            gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            gDPSetEnvColor(POLY_XLU_DISP++, bottleColor->r, bottleColor->g, bottleColor->b, 0);
+            gSPDisplayList(POLY_XLU_DISP++, sBottleDLists[gSaveContext.linkAge]);
+            CLOSE_DISPS(play->state.gfxCtx);
+            // #endregion
         } else if ((*dList != NULL) && (this->leftHandType == PLAYER_MODELTYPE_LH_BOTTLE)) {
             Color_RGB8* bottleColor = &sBottleColors[Player_ActionToBottle(this, this->itemAction)];
 
