@@ -283,6 +283,17 @@ void RegisterFirstPersonMenu() {
         .RaceDisable(false)
         .Options(FloatSliderOptions().Min(0.0f).Max(1.0f).DefaultValue(0.0f).IsPercentage().Format("%.0f%%").Tooltip(
             "Slows the crosshair down while it's over an enemy."));
+    menu->AddWidget(path, "Instant Movement", WIDGET_CVAR_CHECKBOX)
+        .CVar(FPS_CVAR("InstantMovement"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Link reaches full speed the moment you press a movement key and stops the moment you let go, like a "
+            "typical FPS. Off keeps the original game's acceleration and braking."));
+    menu->AddWidget(path, "Show Upper Arms", WIDGET_CVAR_CHECKBOX)
+        .CVar(FPS_CVAR("ShowUpperArms"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip(
+            "Draws Link's upper arms too. They sit close to the camera and can clip through it."));
     menu->AddWidget(path, "Body", WIDGET_CVAR_COMBOBOX)
         .CVar(FPS_CVAR("BodyMode"))
         .RaceDisable(false)

@@ -11842,6 +11842,41 @@ static Vec3f D_80854814 = { 0.0f, 0.0f, 200.0f };
 static f32 sWaterConveyorSpeeds[] = { 2.0f, 4.0f, 7.0f };
 static f32 sFloorConveyorSpeeds[] = { 0.5f, 1.0f, 3.0f };
 
+// #region SOH [FirstPersonMod] FPS-style movement: no acceleration ramp, no slide or brake when stopping
+void Player_FirstPersonMod_SnapLocomotion(Player* this, PlayState* play) {
+    PlayerActionFunc action = this->actionFunc;
+    f32 speedTarget;
+    s16 yawTarget;
+
+    if (!FirstPersonMod_InstantMovement(this) || !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) ||
+        (this->stateFlags1 & PLAYER_STATE1_IN_WATER)) {
+        return;
+    }
+
+    // Braking and back-brake animations: skip straight to standing (or the next move)
+    if ((action == Player_Action_8084170C) || (action == Player_Action_808417FC) ||
+        (action == Player_Action_8084251C)) {
+        this->linearVelocity = 0.0f;
+        func_80839F90(this, play);
+        return;
+    }
+
+    if ((action != Player_Action_80842180) && (action != Player_Action_8084227C) &&
+        (action != Player_Action_8084193C) && (action != Player_Action_808414F8) &&
+        (action != Player_Action_80840DE4)) {
+        return;
+    }
+
+    Player_GetMovementSpeedAndYaw(this, &speedTarget, &yawTarget, SPEED_MODE_LINEAR, play);
+    if (speedTarget > 0.0f) {
+        this->linearVelocity = speedTarget;
+        this->yaw = yawTarget;
+    } else {
+        this->linearVelocity = 0.0f;
+    }
+}
+// #endregion
+
 void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
     s32 pad;
 
@@ -12152,6 +12187,9 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
         if (GameInteractor_Should(VB_EXECUTE_PLAYER_ACTION_FUNC, !(this->stateFlags3 & PLAYER_STATE3_PAUSE_ACTION_FUNC),
                                   this, input)) {
             this->actionFunc(this, play);
+            // #region SOH [FirstPersonMod]
+            Player_FirstPersonMod_SnapLocomotion(this, play);
+            // #endregion
         }
 
         Player_UpdateCamAndSeqModes(play, this);

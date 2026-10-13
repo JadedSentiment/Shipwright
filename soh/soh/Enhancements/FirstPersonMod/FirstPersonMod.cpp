@@ -1407,6 +1407,10 @@ bool ShouldHideLimb(s32 limb) {
         case PLAYER_LIMB_TORSO:
         case PLAYER_LIMB_SHEATH:
             return true;
+        case PLAYER_LIMB_L_SHOULDER:
+        case PLAYER_LIMB_R_SHOULDER:
+            // Upper arms sit right at the camera and clip through it; forearms and hands are what an FPS shows
+            return !CVarGetInteger(FPS_CVAR("ShowUpperArms"), 0);
         default:
             return false;
     }
@@ -1501,16 +1505,16 @@ extern "C" void FirstPersonMod_OverrideLimbDraw(PlayState* play, Player* player,
         return;
     }
 
+    // Mount the arms first: the shoulders may be hidden but still carry the arm chain's transform
+    if (IsArmChainRoot(limbIndex)) {
+        ApplyViewmodelTransform(player, limbIndex == PLAYER_LIMB_L_SHOULDER);
+    }
+
     if (ShouldHideLimb(limbIndex)) {
         // An empty list instead of NULL so the game still tracks this body part's position
         if (*dList != nullptr) {
             *dList = sEmptyDL;
         }
-        return;
-    }
-
-    if (IsArmChainRoot(limbIndex)) {
-        ApplyViewmodelTransform(player, limbIndex == PLAYER_LIMB_L_SHOULDER);
     }
 }
 
@@ -1531,6 +1535,11 @@ extern "C" s32 FirstPersonMod_GetCosmeticHeldItem(Player* player) {
         return -1;
     }
     return ia;
+}
+
+extern "C" s32 FirstPersonMod_InstantMovement(Player* player) {
+    return sCamActive && IsLocalPlayer(player) && sMode == MODE_GAMEPLAY &&
+           CVarGetInteger(FPS_CVAR("InstantMovement"), 1) != 0;
 }
 
 extern "C" s32 FirstPersonMod_SnapStrafeYaw(Player* player) {

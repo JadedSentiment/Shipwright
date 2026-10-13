@@ -63,6 +63,8 @@ s32 FirstPersonMod_GetCosmeticHeldItem(struct Player* player);
 
 // z_player.c: strafing starts straight sideways instead of curving in from forward.
 s32 FirstPersonMod_SnapStrafeYaw(struct Player* player);
+// z_player.c: FPS-style movement, full speed the moment a key is pressed and an instant stop on release.
+s32 FirstPersonMod_InstantMovement(struct Player* player);
 // z_player.c: aim direction for thrown items (boomerang). Returns false when the game should aim normally.
 s32 FirstPersonMod_GetAimAngles(struct Player* player, s16* yaw, s16* pitch);
 
