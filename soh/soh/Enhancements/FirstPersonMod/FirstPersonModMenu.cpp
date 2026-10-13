@@ -223,27 +223,29 @@ void AddAgeSliders(std::shared_ptr<SohGui::SohMenu> menu, WidgetPath& path, cons
         .Options(FloatSliderOptions().Min(-20.0f).Max(20.0f).DefaultValue(0.0f).Step(0.5f).Format("%.1f").Tooltip(
             "Moves your eyes forward or back from Link's head."));
     menu->AddWidget(path, label("Arm Raise: %.0f deg"), WIDGET_CVAR_SLIDER_FLOAT)
-        .CVar(cvar("ArmRaise"))
+        .CVar(cvar("MountRaise"))
         .RaceDisable(false)
-        .Options(FloatSliderOptions().Min(-30.0f).Max(80.0f).DefaultValue(12.0f).Step(1.0f).Format("%.0f deg").Tooltip(
-            "Lifts Link's arms up into view."));
+        .Options(FloatSliderOptions().Min(-30.0f).Max(90.0f).DefaultValue(30.0f).Step(1.0f).Format("%.0f deg").Tooltip(
+            "Tilts the arms forward and up into view."));
     menu->AddWidget(path, label("Arm Forward: %.1f"), WIDGET_CVAR_SLIDER_FLOAT)
-        .CVar(cvar("ArmForward"))
+        .CVar(cvar("MountForward"))
         .RaceDisable(false)
-        .Options(FloatSliderOptions().Min(-20.0f).Max(30.0f).DefaultValue(4.0f).Step(0.5f).Format("%.1f"));
+        .Options(FloatSliderOptions().Min(-20.0f).Max(40.0f).DefaultValue(8.0f).Step(0.5f).Format("%.1f").Tooltip(
+            "Moves the arms away from or closer to the camera."));
     menu->AddWidget(path, label("Arm Height: %.1f"), WIDGET_CVAR_SLIDER_FLOAT)
-        .CVar(cvar("ArmHeight"))
+        .CVar(cvar("MountHeight"))
         .RaceDisable(false)
-        .Options(FloatSliderOptions().Min(-20.0f).Max(20.0f).DefaultValue(-1.0f).Step(0.5f).Format("%.1f"));
+        .Options(FloatSliderOptions().Min(-30.0f).Max(30.0f).DefaultValue(2.0f).Step(0.5f).Format("%.1f").Tooltip(
+            "Moves the arms up or down on screen."));
     menu->AddWidget(path, label("Arm Side: %.1f"), WIDGET_CVAR_SLIDER_FLOAT)
-        .CVar(cvar("ArmSide"))
+        .CVar(cvar("MountSide"))
         .RaceDisable(false)
         .Options(FloatSliderOptions().Min(-15.0f).Max(15.0f).DefaultValue(0.0f).Step(0.5f).Format("%.1f").Tooltip(
             "Shifts the arms left or right."));
     menu->AddWidget(path, label("Arms Follow Look: %.0f%%"), WIDGET_CVAR_SLIDER_FLOAT)
-        .CVar(cvar("ArmPitchFollow"))
+        .CVar(cvar("MountPitchFollow"))
         .RaceDisable(false)
-        .Options(FloatSliderOptions().Min(0.0f).Max(1.0f).DefaultValue(0.6f).IsPercentage().Format("%.0f%%").Tooltip(
+        .Options(FloatSliderOptions().Min(0.0f).Max(1.0f).DefaultValue(0.85f).IsPercentage().Format("%.0f%%").Tooltip(
             "How much the arms tilt with you when you look up or down."));
 }
 

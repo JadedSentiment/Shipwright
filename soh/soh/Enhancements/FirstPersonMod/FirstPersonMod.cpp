@@ -94,20 +94,21 @@ float AgeCfg(const char* key, const char* legacyKey, float def) {
     float fallback = (legacyKey != nullptr) ? CVarGetFloat(legacyKey, def) : def;
     return CVarGetFloat(name.c_str(), fallback);
 }
+// Camera-mounted arm placement (body-space offsets from where Link's arms naturally sit relative to his eyes)
 float CfgVmRaise() {
-    return AgeCfg("ArmRaise", FPS_CVAR("Viewmodel.Raise"), 12.0f);
+    return AgeCfg("MountRaise", nullptr, 30.0f);
 }
 float CfgVmForward() {
-    return AgeCfg("ArmForward", FPS_CVAR("Viewmodel.Forward"), 4.0f);
+    return AgeCfg("MountForward", nullptr, 8.0f);
 }
 float CfgVmHeight() {
-    return AgeCfg("ArmHeight", FPS_CVAR("Viewmodel.Height"), -1.0f);
+    return AgeCfg("MountHeight", nullptr, 2.0f);
 }
 float CfgVmSide() {
-    return AgeCfg("ArmSide", nullptr, 0.0f);
+    return AgeCfg("MountSide", nullptr, 0.0f);
 }
 float CfgVmPitchFollow() {
-    return AgeCfg("ArmPitchFollow", FPS_CVAR("Viewmodel.PitchFollow"), 0.6f);
+    return AgeCfg("MountPitchFollow", nullptr, 0.85f);
 }
 float CfgCamHeight() {
     return AgeCfg("CamHeight", nullptr, 0.0f);
@@ -1411,47 +1412,78 @@ bool ShouldHideLimb(s32 limb) {
     }
 }
 
-// Applies a world-space transform W on top of the current limb matrix: M' = W * M.
-// W rotates around the eye (so the arms move like they're attached to your view) and then offsets in view space.
-void ApplyViewmodelTransform(Player* player) {
-    MtxF current, rotY, rotP, rot, world, result;
-    Matrix_Get(&current);
+// Where Link's upper-body joint sits relative to his eyes, in his own body space (x left, y up, z forward).
+// Measured from his real pose while he stands or walks, so it fits both child and adult proportions.
+Vec3f sUpperFromEye = { 0.0f, -18.0f, -2.0f };
+bool sUpperFromEyeValid = false;
+s32 sUpperFromEyeAge = -1;
 
-    // Align arms with the view yaw when Link's body faces elsewhere (aiming, swimming, turning)
-    float yawDiff = WrapBinang(sViewYaw - (float)player->actor.shape.rot.y);
-    // When Link is strafing he already faces the view; only nudge
-    SetRotation(&rotY, V3(0, 1, 0), yawDiff * kBinangToRad);
+bool CanCalibrateArms(Player* player) {
+    float follow;
+    return !InSpecialPose(player, &follow) && !Player_FirstPersonMod_IsMeleeAttacking(player) &&
+           player->meleeWeaponState == 0 && (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
+           !(player->stateFlags1 & (PLAYER_STATE1_CHARGING_SPIN_ATTACK | PLAYER_STATE1_CARRYING_ACTOR |
+                                    PLAYER_STATE1_TALKING | PLAYER_STATE1_IN_ITEM_CS)) &&
+           !(player->stateFlags2 & (PLAYER_STATE2_SPIN_ATTACKING | PLAYER_STATE2_SWORD_LUNGE));
+}
 
-    // Arms follow the look pitch, plus a raise into view when idle
+// Camera-mounted arms. Called at each shoulder with the current matrix holding Link's real upper-body joint.
+// The arms are re-parented to a virtual upper body fixed in front of the camera: its position comes from the
+// camera plus the arm sliders, and only its rotation (torso twist and lean from Link's animation) is kept.
+// The shoulder, elbow and wrist then animate exactly as Link's real arms do, so every swing and item works.
+void ApplyViewmodelTransform(Player* player, bool firstShoulder) {
+    MtxF upper, toBody, upperLinear, bodyPose, rotQ, rotYaw, rotPitch, rotRaise, rotTmp, result;
+    Matrix_Get(&upper);
+
+    // Link's real upper body, expressed relative to his body yaw (removes where he stands and which way he faces)
+    float bodyYaw = (float)player->actor.shape.rot.y;
+    SetRotation(&toBody, V3(0, 1, 0), -bodyYaw * kBinangToRad);
+    upperLinear = upper;
+    upperLinear.xw = upperLinear.yw = upperLinear.zw = 0.0f;
+    SkinMatrix_MtxFMtxFMult(&toBody, &upperLinear, &bodyPose);
+
+    // Keep the anchor calibrated to Link's proportions (once per frame, only in calm poses)
+    s32 age = gSaveContext.linkAge;
+    if (sUpperFromEyeAge != age) {
+        sUpperFromEyeValid = false;
+        sUpperFromEyeAge = age;
+    }
+    if (firstShoulder && CanCalibrateArms(player)) {
+        Vec3f rel = MtxRotate(&toBody, Sub(V3(upper.xw, upper.yw, upper.zw), player->actor.focus.pos));
+        if (Len(rel) < 60.0f) {
+            sUpperFromEye = sUpperFromEyeValid ? LerpV(sUpperFromEye, rel, 0.05f) : rel;
+            sUpperFromEyeValid = true;
+        }
+    }
+
+    // Camera orientation: view yaw, plus the share of look pitch the arms follow, plus the idle raise
     bool vanillaPitched = player->upperLimbRot.x != 0 || player->unk_6AD != 0;
     float pitchFollow = vanillaPitched ? 0.0f : Clampf(CfgVmPitchFollow(), 0.0f, 1.0f);
-    float raise = CfgVmRaise() * kDegToBinang * sPoseWeight;
-    float pitchAngle = (sPitch * pitchFollow + raise) * kBinangToRad;
+    Vec3f localRight = V3(-1.0f, 0.0f, 0.0f); // body-space right; rotating around it tips forward toward up
+    SetRotation(&rotYaw, V3(0, 1, 0), sViewYaw * kBinangToRad);
+    SetRotation(&rotPitch, localRight, sPitch * pitchFollow * kBinangToRad);
+    SetRotation(&rotRaise, localRight, CfgVmRaise() * sPoseWeight * kDegToBinang * kBinangToRad);
+    SkinMatrix_MtxFMtxFMult(&rotYaw, &rotPitch, &rotQ);
+
+    // Anchor in body space: calibrated position + sliders (forward, height, side)
+    Vec3f anchor = Add(sUpperFromEye, V3(-CfgVmSide(), CfgVmHeight(), CfgVmForward()));
+    Vec3f anchorWorld = Add(sEye, MtxRotate(&rotQ, anchor));
+
+    // Sway and bob in view space
     Vec3f right = RightFromYaw(sViewYaw);
-    // right = forward x up, so a positive rotation around +right tips forward toward up
-    SetRotation(&rotP, right, pitchAngle);
-
-    SkinMatrix_MtxFMtxFMult(&rotP, &rotY, &rot);
-
-    // Offset in view space: forward/height from the pose, plus sway and bob
-    Vec3f fwd = DirFromAngles(sViewYaw, sPitch);
-    Vec3f up = Norm(Cross(right, fwd));
+    Vec3f up = Norm(Cross(right, DirFromAngles(sViewYaw, sPitch)));
     float bob = Clampf(CfgBob(), 0.0f, 1.0f) * sBobAmountSmoothed;
-    Vec3f offset = Add(Scale(fwd, CfgVmForward() * sPoseWeight), Scale(up, CfgVmHeight() * sPoseWeight));
-    offset = Add(offset, Scale(right, CfgVmSide() * sPoseWeight + sSwayOffset.x + sinf(sBobPhase) * 0.6f * bob));
-    offset = Add(offset, Scale(up, sSwayOffset.y + sinf(sBobPhase * 2.0f) * 0.5f * bob));
+    anchorWorld = Add(anchorWorld, Scale(right, sSwayOffset.x + sinf(sBobPhase) * 0.6f * bob));
+    anchorWorld = Add(anchorWorld, Scale(up, sSwayOffset.y + sinf(sBobPhase * 2.0f) * 0.5f * bob));
 
-    // W(v) = rot * (v - pivot) + pivot + offset
-    Vec3f pivot = sEye;
-    Vec3f rp = MtxRotate(&rot, pivot);
-    world = rot;
-    world.xw = pivot.x - rp.x + offset.x;
-    world.yw = pivot.y - rp.y + offset.y;
-    world.zw = pivot.z - rp.z + offset.z;
-    world.wx = world.wy = world.wz = 0.0f;
-    world.ww = 1.0f;
-
-    SkinMatrix_MtxFMtxFMult(&world, &current, &result);
+    // result = Translate(anchorWorld) * Q * Raise * bodyPose
+    SkinMatrix_MtxFMtxFMult(&rotQ, &rotRaise, &rotTmp);
+    SkinMatrix_MtxFMtxFMult(&rotTmp, &bodyPose, &result);
+    result.xw = anchorWorld.x;
+    result.yw = anchorWorld.y;
+    result.zw = anchorWorld.z;
+    result.wx = result.wy = result.wz = 0.0f;
+    result.ww = 1.0f;
     Matrix_Put(&result);
 }
 
@@ -1478,7 +1510,7 @@ extern "C" void FirstPersonMod_OverrideLimbDraw(PlayState* play, Player* player,
     }
 
     if (IsArmChainRoot(limbIndex)) {
-        ApplyViewmodelTransform(player);
+        ApplyViewmodelTransform(player, limbIndex == PLAYER_LIMB_L_SHOULDER);
     }
 }
 
